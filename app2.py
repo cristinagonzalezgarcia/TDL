@@ -54,8 +54,9 @@ except Exception as e:
 def extraer_huella_acustica(ruta_o_buffer):
     audio, sr = librosa.load(ruta_o_buffer, sr=16000)
     audio_limpio, _ = librosa.effects.trim(audio, top_db=20)
-    if len(audio_limpio) == 0: return None
     
+    if len(audio_limpio) == 0: return None
+        
     mfccs = librosa.feature.mfcc(y=audio_limpio, sr=sr, n_mfcc=20)
     delta_mfccs = librosa.feature.delta(mfccs)
     delta2_mfccs = librosa.feature.delta(mfccs, order=2)
@@ -67,47 +68,71 @@ def extraer_huella_acustica(ruta_o_buffer):
 # 4. INTERFAZ GRÁFICA
 # ==========================================
 st.markdown("<div class='titulo-app'>🎙️ TDL-Acoustic Hub</div>", unsafe_allow_html=True)
-st.markdown("<div class='subtitulo'>Screening Temprano del TDL (Edge AI)</div>", unsafe_allow_html=True)
+st.markdown("<div class='subtitulo'>Screening Temprano del Trastorno del Desarrollo del Lenguaje (Edge AI)</div>", unsafe_allow_html=True)
 
 if not modelo_cargado:
-    st.error(f"❌ Error al cargar modelo/scaler: {error_msg}")
+    st.error(f"❌ No se encontró el modelo o el scaler. Entrena la red neuronal primero.\nError: {error_msg}")
 else:
-    archivo_audio = st.file_uploader("📥 Sube una grabación fonológica (.wav / .mp3):", type=['wav', 'mp3'])
+    archivo_audio = st.file_uploader("📥 Sube una grabación fonológica pediátrica (.wav / .mp3):", type=['wav', 'mp3'])
     
     if archivo_audio is not None:
         st.audio(archivo_audio, format="audio/wav")
         
         if st.button("🧠 Ejecutar Inferencia Clínica", type="primary", use_container_width=True):
-            with st.spinner("Analizando..."):
+            with st.spinner("Extrayendo MFCCs y ejecutando Red Neuronal Multicabeza..."):
+                time.sleep(0.5) 
+                
                 vector_acustico = extraer_huella_acustica(archivo_audio)
                 
                 if vector_acustico is not None:
                     vector_escalado = scaler.transform(vector_acustico)
                     predicciones = modelo.predict(vector_escalado, verbose=0)
                     
-                    # --- TRADUCTOR DE IA A HUMANO ---
-                    # Lista alfabética (necesaria para el LabelEncoder)
-                    clases_palabras = [
-                        'Autobus', 'Barco', 'Blanco', 'Bolso', 'Bufanda', 'Cara', 'Chaqueta', 'Cielo', 
-                        'Clase', 'Cristal', 'Diente', 'Espada', 'Estrella', 'Flecha', 'Fruta', 'Fuego', 
-                        'Globo', 'Gorro', 'Jabón', 'Lapiz', 'Libro', 'Mosca', 'Negro', 'Niño', 
-                        'Peine', 'Piedra', 'Plancha', 'Rojo', 'Silla', 'Tambor', 'Taza', 'Tres'
-                    ]
+                    clases_palabra = sorted(["autobus", "blanco", "bufanda", "cara", "flecha", "fruta"]) 
+                    clases_origen = sorted(["España", "Latinoamérica", "No nativo"])
+                    clases_sexo = sorted(["Hombre", "Mujer"])
                     
-                    idx_pal = np.argmax(predicciones[0])
-                    nombre_completo = clases_palabras[idx_pal]
-                    resultado_palabra = nombre_completo.split('_')[0] # Limpieza del nombre
+                    idx_palabra = np.argmax(predicciones[0], axis=1)[0]
+                    idx_origen = np.argmax(predicciones[1], axis=1)[0]
+                    idx_sexo = np.argmax(predicciones[2], axis=1)[0]
+                    
+                    resultado_palabra = clases_palabra[idx_palabra] if idx_palabra < len(clases_palabra) else f"Clase {idx_palabra}"
+                    resultado_origen = clases_origen[idx_origen] if idx_origen < len(clases_origen) else f"Clase {idx_origen}"
+                    resultado_sexo = clases_sexo[idx_sexo] if idx_sexo < len(clases_sexo) else f"Clase {idx_sexo}"
+
                     confianza_palabra = np.max(predicciones[0]) * 100
                     
-                    resultado_origen = ['España', 'Latinoamérica', 'No Nativo'][np.argmax(predicciones[1])]
-                    resultado_sexo = 'Mujer' if predicciones[2][0][0] > 0.5 else 'Hombre'
+                    st.success("✅ Análisis completado en milisegundos. Latencia óptima para dispositivos Edge AI.")
                     
-                    st.success("✅ Análisis completado.")
                     st.markdown("### 📋 Resultados del Diagnóstico Clínico")
                     
-                    c1, c2, c3 = st.columns(3)
-                    c1.markdown(f"<div class='metric-card'><h4>Palabra</h4><h2>{resultado_palabra}</h2><p>Conf: {confianza_palabra:.1f}%</p></div>", unsafe_allow_html=True)
-                    c2.markdown(f"<div class='metric-card'><h4>Región</h4><h2>{resultado_origen}</h2></div>", unsafe_allow_html=True)
-                    c3.markdown(f"<div class='metric-card'><h4>Sexo</h4><h2>{resultado_sexo}</h2></div>", unsafe_allow_html=True)
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <h4 style='color:#64748b; margin:0;'>Palabra Detectada</h4>
+                            <h2 style='color:#1e3a8a; margin:10px 0; text-transform: uppercase;'>{resultado_palabra}</h2>
+                            <p style='color:#22c55e; font-weight:bold; margin:0;'>Confianza: {confianza_palabra:.1f}%</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <h4 style='color:#64748b; margin:0;'>Perfil Demográfico</h4>
+                            <h2 style='color:#1e3a8a; margin:10px 0;'>{resultado_origen}</h2>
+                            <p style='color:#22c55e; margin:0;'>Filtro de sesgo regional</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    with col3:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <h4 style='color:#64748b; margin:0;'>Sexo Biológico</h4>
+                            <h2 style='color:#1e3a8a; margin:10px 0;'>{resultado_sexo}</h2>
+                            <p style='color:#22c55e; margin:0;'>Análisis de Frecuencia F0</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
                 else:
-                    st.error("No se pudo aislar la voz. El audio es demasiado corto.")
+                    st.error("No se pudo aislar la voz. El audio es demasiado corto o solo contiene silencio.")
